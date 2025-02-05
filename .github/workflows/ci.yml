@@ -21,7 +21,7 @@ on:
 
 jobs:
   config:
-    name: Build config
+    name: Prepare
     runs-on: ubuntu-latest
 
     steps:
@@ -56,6 +56,25 @@ jobs:
           BASE_IMAGE_TAGS_RD: ${{ github.event.client_payload.base_image_tags }}
           BASE_IMAGE_DIGEST: ${{ github.event.client_payload.digest }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Pull base image to local
+        run: |-
+          set -eux
+          docker pull "$BASE_IMAGE"
+          docker save "$BASE_IMAGE" > ./ci_base_image.tar
+          stat ./ci_base_image.tar
+        env:
+          BASE_IMAGE: ${{ steps.config.outputs.base_image }}
+
+      - name: Upload base image to artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci_base_image
+          path: ./ci_base_image.tar
+          retention-days: 1
+
     outputs:
       base_image: ${{ steps.config.outputs.base_image }}
       base_target_tags: ${{ steps.config.outputs.base_target_tags }}
@@ -69,6 +88,8 @@ jobs:
       dockerfile_name: Dockerfile-extra
       build_args: |-
         BASE_IMAGE=${{ needs.config.outputs.base_image }}
+      base_image_artifact_name: ci_base_image
+      base_image_file_name: ci_base_image.tar
       base_target_tags: ${{ needs.config.outputs.base_target_tags }}
       image_name: mcdreforged/mcdreforged-extra
       image_tag_maker_script: |-
@@ -91,6 +112,8 @@ jobs:
       build_args: |-
         BASE_IMAGE=${{ matrix.extra == 'true' && format('mcdreforged/mcdreforged-extra@{0}', needs.extra.outputs.digest) || needs.config.outputs.base_image }}
         JAVA=${{ matrix.java }}
+      base_image_artifact_name: ci_base_image
+      base_image_file_name: ci_base_image.tar
       base_target_tags: ${{ needs.config.outputs.base_target_tags }}
       image_name: mcdreforged/mcdreforged-${{ matrix.distribution }}
       image_tag_maker_script: |-
